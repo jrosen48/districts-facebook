@@ -63,3 +63,29 @@ create_covid_mention_plot <- function(covid_mention_data) {
   
   here("plots", "covid-mentions.png")
 }
+
+create_reactions_plot <- function(d) {
+  
+  p <- d %>% 
+    mutate(created_day = round_date(created, "day")) %>% 
+    select(created_day, likes:care) %>% 
+    group_by(created_day) %>% 
+    summarize_all(list(mean = mean)) %>% 
+    pivot_longer(-created_day) %>% 
+    ggplot(aes(x = created_day, y = value)) +
+    geom_point() +
+    geom_smooth() +
+    facet_wrap(~name, scales = "free_y") +
+    labs(title = "Mean reactions per day",
+         y = "Reaction count") +
+    theme_minimal() +
+    theme(plot.title.position = "plot")
+  
+  ggsave(here("plots", "reactions.png"), 
+         p,
+         width = 8,
+         height = 6)
+  
+  here("plots", "reactions.png")
+  
+}

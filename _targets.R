@@ -4,7 +4,7 @@ source(here::here("R", "functions.R"))
 
 # Set target-specific options such as packages.
 tar_option_set(packages = c("purrr", "readr", "ggplot2", "janitor", "dplyr",
-                            "here", "lubridate")
+                            "here", "lubridate", "tidyr")
 )
 
 # Define targets
@@ -15,9 +15,12 @@ targets <- list(
              format = "file"),
   tar_target(raw_data, map_df(files, read_csv_with_col_types)),
   tar_target(d, prep_data(raw_data)),
+  
   tar_target(covid_mentions, compute_covid_mentions(d)),
   tar_target(plot_covid_mentions, create_covid_mention_plot(covid_mentions), 
-             format = "file")
+             format = "file"),
+  
+  tar_target(plot_reactions, create_reactions_plot(d))
 )
 
 # End with a call to tar_pipeline() to wrangle the targets together.

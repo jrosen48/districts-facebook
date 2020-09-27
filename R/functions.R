@@ -64,20 +64,28 @@ create_covid_mention_plot <- function(covid_mention_data) {
   here("plots", "covid-mentions.png")
 }
 
-create_reactions_plot <- function(d) {
-  
-  p <- d %>% 
+compute_reactions_per_post <- function(d) {
+  d %>% 
     mutate(created_day = round_date(created, "day")) %>% 
     select(created_day, likes:care) %>% 
     group_by(created_day) %>% 
     summarize_all(list(mean = mean)) %>% 
     pivot_longer(-created_day) %>% 
+    mutate(weekday = weekdays(created_day)) %>% 
+    filter(!weekday %in% c("Saturday", "Sunday"))
+  
+}
+create_reactions_plot <- function(d) {
+  
+  p <- d %>% 
     ggplot(aes(x = created_day, y = value)) +
     geom_point() +
     geom_smooth() +
     facet_wrap(~name, scales = "free_y") +
-    labs(title = "Mean reactions per day",
-         y = "Reaction count") +
+    labs(title = "Mean reactions per post",
+         subtitle = "Data from weekends removed",
+         y = "Reaction count",
+         x = NULL) +
     theme_minimal() +
     theme(plot.title.position = "plot")
   

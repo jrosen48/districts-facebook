@@ -20,7 +20,8 @@ targets <- list(
   tar_target(plot_covid_mentions, create_covid_mention_plot(covid_mentions), 
              format = "file"),
   
-  tar_target(plot_reactions, create_reactions_plot(d))
+  tar_target(compute_reactions, compute_reactions_per_post(d)),
+  tar_target(plot_reactions, create_reactions_plot(compute_reactions))
 )
 
 # End with a call to tar_pipeline() to wrangle the targets together.

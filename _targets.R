@@ -5,13 +5,13 @@ source(here::here("R", "functions.R"))
 # Set target-specific options such as packages.
 tar_option_set(packages = c("purrr", "readr", "ggplot2", "janitor", "dplyr",
                             "here", "lubridate")
-               )
+)
 
 # Define targets
 targets <- list(
   tar_target(files, list.files(here::here("data"), 
-                              full.names = TRUE,
-                              pattern = "\\.csv$"), 
+                               full.names = TRUE,
+                               pattern = "\\.csv$"), 
              format = "file"),
   tar_target(raw_data, map_df(files, read_csv)),
   tar_target(d, prep_data(raw_data)),

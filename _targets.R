@@ -13,7 +13,7 @@ targets <- list(
                                full.names = TRUE,
                                pattern = "\\.csv$"), 
              format = "file"),
-  tar_target(raw_data, map_df(files, read_csv)),
+  tar_target(raw_data, map_df(files, read_csv_with_col_types)),
   tar_target(d, prep_data(raw_data)),
   tar_target(covid_mentions, compute_covid_mentions(d)),
   tar_target(plot_covid_mentions, create_covid_mention_plot(covid_mentions), 

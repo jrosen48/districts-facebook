@@ -9,9 +9,10 @@ tar_option_set(packages = c("purrr", "readr", "ggplot2", "janitor", "dplyr",
 
 # Define targets
 targets <- list(
-  tar_target(files, list.files(here::here("data"), 
+  tar_target(files, list.files(here::here("data", "districts"), 
                                full.names = TRUE,
-                               pattern = "\\.csv$"), 
+                               pattern = "\\.csv$", 
+                               recursive = TRUE), # if data is organized by sub-directories; w/ all data, can take awhile
              format = "file"),
   tar_target(raw_data, map_df(files, read_csv_with_col_types)),
   tar_target(d, prep_data(raw_data)),

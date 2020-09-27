@@ -2,3 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+.DS_Store
+data/*
+!data/README.md
+_targets/*

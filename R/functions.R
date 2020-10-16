@@ -75,6 +75,7 @@ compute_reactions_per_post <- function(d) {
     filter(!weekday %in% c("Saturday", "Sunday"))
   
 }
+
 create_reactions_plot <- function(d) {
   
   p <- d %>% 
@@ -82,7 +83,7 @@ create_reactions_plot <- function(d) {
     geom_point() +
     geom_smooth() +
     facet_wrap(~name, scales = "free_y") +
-    labs(title = "Mean reactions per post",
+    labs(title = "Mean reactions per day",
          subtitle = "Data from weekends removed",
          y = "Reaction count",
          x = NULL) +

@@ -1,0 +1,253 @@
+---
+title: "Content analysis of FB posts - 2020"
+date: 2020-10-21
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, dpi = 250, warning = FALSE)
+```
+
+# Loading, setting up
+
+```{r, load-packages-and-connect-to-db}
+library(tidyverse) # analysis and processing
+library(DBI) # database interface
+library(scales) # plots
+library(quanteda) # text analysis
+
+cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-fb-posts.sqlite"))
+```
+
+```{r}
+ss_collected <- tbl(cn, "posts") %>% 
+  filter(year == 2020) %>% 
+  collect()
+```
+
+```{r}
+ss_collected
+```
+
+# Links
+
+## Overall 
+
+```{r}
+ss <- ss_collected %>% 
+  mutate(links_list = stringr::str_extract_all(message,
+                                        "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"))
+
+unnested_urls <- ss %>% 
+  unnest(links_list) %>% 
+  filter(!is.na(links_list))
+```
+
+```{r}
+# my_long_urls <- longurl::expand_urls(unnested_urls$links_list) # is slow; should only do with short links
+```
+
+```{r}
+my_long_urls_processed <- unnested_urls %>% 
+  mutate(orig_url= str_split(links_list, ":=:")) %>% 
+  mutate(orig_url_second = map(orig_url, pluck, 2)) %>% 
+  rowwise() %>%  
+  mutate(url = ifelse(is.null(orig_url_second), orig_url, orig_url_second))
+
+parsed_urls <- urltools::url_parse(my_long_urls_processed$url)
+
+parsed_urls %>% 
+  count(domain) %>% 
+  arrange(desc(n)) %>% 
+  filter(!is.na(domain)) %>%
+  slice(1:40) %>% 
+  knitr::kable()
+```
+
+## By year
+
+```{r}
+ss <- ss_collected %>% 
+  mutate(links_list = stringr::str_extract_all(message,
+                                               "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"))
+
+unnested_urls <- ss %>% 
+  unnest(links_list) %>% 
+  filter(!is.na(links_list))
+
+# my_long_urls <- longurl::expand_urls(unnested_urls$links_list) # is slow; should only do with short links
+
+my_long_urls_processed <- unnested_urls %>% 
+  mutate(orig_url= str_split(links_list, ":=:")) %>% 
+  mutate(orig_url_second = map(orig_url, pluck, 2)) %>% 
+  rowwise() %>%  
+  mutate(url = ifelse(is.null(orig_url_second), orig_url, orig_url_second))
+
+parsed_urls <- urltools::url_parse(my_long_urls_processed$url)
+parsed_urls$month <- my_long_urls_processed$month
+parsed_urls %>% 
+  as_tibble()
+
+# could probably use table above for this
+sum_by_domain <- parsed_urls %>% 
+  group_by(month) %>% 
+  count(domain) %>% 
+  arrange(desc(n)) %>% 
+  filter(!is.na(domain),
+         n > 0) %>% 
+  ungroup() %>% 
+  group_by(domain) %>% 
+  summarize(sum_n = sum(n)) %>%
+  arrange(desc(sum_n)) %>% 
+  slice(1:30) # grabbing 30 most common domains
+
+parsed_urls %>% 
+  group_by(month) %>% 
+  count(domain) %>% 
+  arrange(desc(n)) %>% 
+  filter(!is.na(domain),
+         n > 0) %>% 
+  spread(month, n, fill = 0) %>% 
+  semi_join(sum_by_domain)
+```
+
+# Text 
+
+```{r}
+my_corpus <- corpus(ss_collected, text_field = "message")
+
+my_tokens <- tokens(my_corpus, remove_symbols = T, remove_numbers = T, remove_punct = T, remove_url = T)
+
+my_dfm <- quanteda::dfm(my_tokens, remove = stopwords('en'))
+```
+
+## Frequencies
+
+Overall
+
+```{r}
+textstat_frequency(my_dfm, n = 10, groups = "month") %>% 
+  knitr::kable()
+```
+
+By month - weighted
+
+```{r}
+my_dfm %>% 
+  dfm_tfidf() %>% 
+  textstat_frequency(n = 10, groups = "month", force = TRUE) %>% 
+  as_tibble() %>% 
+  select(feature, rank, group) %>% 
+  group_split("group") %>% 
+  knitr::kable()
+```
+
+By month - not weighted
+
+```{r}
+my_dfm %>% 
+  textstat_frequency(n = 10, groups = "month", force = TRUE) %>% 
+  as_tibble() %>% 
+  select(feature, rank, group) %>% 
+  group_split("group") %>% 
+  knitr::kable()
+```
+
+## Key words in context
+
+From report
+
+```{r}
+kwic(my_tokens, "learning") %>% slice(1:5)
+kwic(my_tokens, "technology") %>% slice(1:5)
+kwic(my_tokens, "student") %>% slice(1:5)
+kwic(my_tokens, "education") %>% slice(1:5)
+kwic(my_tokens, "teaching") %>% slice(1:5)
+kwic(my_tokens, "online") %>% slice(1:5)
+kwic(my_tokens, "teacher") %>% slice(1:5)
+```
+
+Other terms
+
+```{r}
+kwic(my_tokens, "covid") %>% slice(1:5)
+kwic(my_tokens, "school") %>% slice(1:5)
+kwic(my_tokens, "website") %>% slice(1:5) 
+kwic(my_tokens, "resource") %>% slice(1:5)
+kwic(my_tokens, "link") %>% slice(1:5)
+kwic(my_tokens, "laptop") %>% slice(1:5)
+kwic(my_tokens, "internet") %>% slice(1:5) 
+kwic(my_tokens, "access") %>% slice(1:5)
+kwic(my_tokens, "packet") %>% slice(1:5)
+```
+
+## Term co-occurence
+
+not working with the entire dataset
+
+```{r, eval = FALSE}
+my_fcm <- fcm(my_dfm)
+feat <- names(topfeatures(my_fcm, 50))
+my_fcm_select <- fcm_select(my_fcm, pattern = feat, selection = "keep")
+
+size <- log(colSums(dfm_select(my_dfm, feat, selection = "keep")))
+textplot_network(my_fcm_select, min_freq = 0.8, vertex_size = size / max(size) * 3,
+                 edge_alpha = .3,
+                 edge_size = 2)
+```
+
+## Using regex
+
+```{r, text-analysis-overall}
+text <- ss %>% 
+  select(message, year) %>% 
+  collect() %>%  
+  mutate(learning = str_detect(message, "(?i)learning"),
+         technology = str_detect(message, "(?i)technology"),
+         student = str_detect(message, "(?i)student"),
+         education = str_detect(message, "(?i)education"),
+         teaching = str_detect(message, "(?i)teaching"),
+         online = str_detect(message, "(?i)online"),
+         teacher = str_detect(message, "(?i)teacher"),
+         covid = str_detect(message, "(?i)covid")) %>% 
+  filter(!is.na(message))
+
+text_to_plot <- text %>% 
+  select(year, learning:covid) %>% 
+  gather(key, val, -year) %>% 
+  group_by(key, year) %>% 
+  summarize(mean_val = mean(val, na.rm = TRUE))
+
+text_to_plot 
+
+# text_to_plot %>% 
+#   filter(year >= 2010) %>% 
+#   ggplot(aes(x = year, y = mean_val, color = key, group = key)) +
+#   geom_point() +
+#   geom_line() +
+#   scale_color_brewer(type = "qual") +
+#   hrbrthemes::theme_ipsum() + 
+#   scale_x_continuous(breaks = 2010:2020) +
+#   ylab("proportion")
+```
+
+# Photos
+
+Not run just yet, working on API
+
+```{r, eval = FALSE}
+ss_1000 <- tbl(cn, "posts") %>% 
+  filter(year == 2020) %>% 
+  select(facebook_id) %>% 
+  collect() %>% 
+  sample_n(1000)
+
+files_to_download <- ss_collected %>% filter(type == "Photo") %>% pull(link) %>% head(5)
+
+map2(files_to_download,
+     str_c("downloaded-photos/", 1:5, ".jpeg"),
+           download.file)
+```

@@ -1,0 +1,331 @@
+---
+title: "Initial Exploration of FB Posts Database"
+date: 2020-10-21
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, dpi = 250, warning = FALSE)
+knitr::clean_cache()
+```
+
+# Loading, setting up
+
+```{r, load-packages-and-connect-to-db}
+library(tidyverse) # analysis and processing
+library(DBI) # database interface
+library(scales) # plots
+library(quanteda) # text analysis
+
+cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-fb-posts.sqlite"))
+```
+
+## Total number of posts
+
+```{r}
+total_unique_posts <- tbl(cn, "posts") %>% 
+  distinct(url, .keep_all = TRUE) %>% 
+  tally()
+```
+
+```{r, total-n-posts}
+total_posts <- by_day %>% 
+  summarize(sum_n = sum(n))
+
+total_posts
+```
+
+Duplicated posts - have to find a way to remove these
+
+```{r, dup-posts}
+total_unique_posts - total_posts
+```
+
+URL is a unique identifier
+
+```{r, inspect-table}
+tbl(cn, "posts") %>% 
+  count(url) %>% 
+  tally()
+```
+
+## What we'll need to merge on
+
+Join un `url` from the db
+
+```{r, list-keys-to-possibly-merge-on}
+tbl(cn, "posts") %>% 
+  select(page_name, url) %>% 
+  head(10) %>% 
+  knitr::kable()
+```
+
+Join on `url` from `all-institutional-facebook-urls.csv`:
+
+```{r, orig-data-to-match}
+all_institutional_facebook_urls <- read_csv("data-raw/all-institutional-facebook-urls.csv")
+
+all_institutional_facebook_urls <- all_institutional_facebook_urls %>% 
+  mutate(parsed_path = ifelse(str_sub(parsed_path, start = -1) == "/",
+                      str_sub(parsed_path, end = -2),
+                      parsed_path)) %>% 
+  mutate(url = str_c("https://www.facebook.com/", parsed_path)) %>% 
+  select(-parsed_path)
+
+all_institutional_facebook_urls %>% 
+  head(10) %>% 
+  knitr::kable()
+```
+
+Let's try it! For 100,000 posts
+
+```{r}
+posts_100k <- tbl(cn, "posts") %>% 
+  select(page_name, likes, url) %>% 
+  mutate(url = tolower(url)) %>% 
+  head(100000) %>% 
+  collect()
+
+posts_100k <- posts_100k %>% 
+  separate(url, into = c("url", "post"), sep = "/posts")
+
+data_with_nces_id_joined <- left_join(posts_100k, all_institutional_facebook_urls, by = "url")
+
+data_with_nces_id_joined %>% filter(is.na(nces_id)) # aruond 15% without a match; why?
+
+data_with_nces_id_joined_match <- data_with_nces_id_joined %>% 
+  filter(!is.na(nces_id))
+```
+
+# Joining data based on NCES ID
+
+This data is from the ELSI Table Generator: https://nces.ed.gov/ccd/elsi/tableGenerator.aspx
+
+```{r}
+nces_info_for_districts <- read_csv(here::here("data", "nces-info-for-districts.csv"))
+
+nces_info_for_districts$nces_id
+data_with_nces_id_joined_match$nces_id # what is the weird /" symbol in these?
+
+data_with_nces_id_joined_match %>% 
+  filter(str_detect(url, "roanokecitypublicschools")) # 5103300 is district ID
+
+data_with_nces_id_joined_match %>% 
+  left_join(nces_info_for_districts, by = "nces_id") %>% 
+  count(state) # very many missing; I think they may be school IDs? many questions
+```
+
+# Types of post
+
+```{r}
+tbl(cn, "posts") %>% 
+  count(type) %>% 
+  arrange(desc(n)) %>% 
+  knitr::kable()
+```
+
+# Accounts
+
+## Total number of accounts
+
+```{r, n-accounts}
+tbl(cn, "posts") %>% 
+  count(facebook_id) %>% 
+  tally()
+```
+
+## Distribution of the number of posts by accounts
+
+```{r, users-dist}
+tbl(cn, "posts") %>% count(facebook_id) %>% 
+  ggplot(aes(x = n)) + 
+  geom_histogram(bins = 1000)
+```
+
+
+# Time series
+
+```{r, plot-between-years}
+by_day <- tbl(cn, "posts") %>% 
+  count(created_rounded_to_day) %>% 
+  collect() %>% 
+  mutate(day = as.POSIXct(created_rounded_to_day, origin = "1970-01-01")) %>% 
+  filter(day >= lubridate::ymd("2005-01-01"))
+```
+
+## Month of year - within the year
+
+```{r, plot-within-year}
+by_day %>% 
+  mutate(yday = lubridate::yday(day),
+         month = lubridate::month(day),
+         year = lubridate::year(day)) %>% 
+  filter(year >= 2010) %>% 
+  mutate(year = as.factor(year)) %>% 
+  group_by(year, month) %>% 
+  summarize(sum_n = sum(n)) %>% 
+  ggplot(aes(x = month, y = sum_n, color = year, group = year)) +
+  geom_point() +
+  geom_line() +
+  hrbrthemes::theme_ipsum() +
+  scale_color_brewer(type = "div") +
+  scale_y_continuous(label = comma)
+```
+
+## Month of year - between years
+
+```{r, plot-month}
+by_day %>% 
+  ggplot(aes(x = day, y = n)) + 
+  geom_point(alpha = .25) +
+  geom_line() +
+  theme_bw() +
+  scale_y_continuous(label = comma) +
+  geom_smooth(se = FALSE, color = "blue")
+```
+
+## Day of week
+
+```{r, plot-day}
+tbl(cn, "posts") %>%  
+  count(day_of_week) %>% 
+  collect() %>% 
+  mutate(day_of_week_string = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")) %>% 
+  mutate(day_of_week_string = fct_inorder(day_of_week_string)) %>% 
+  ggplot(aes(x = day_of_week_string, y = n)) +
+  geom_col() +
+  theme_bw() + 
+  scale_y_continuous(label = comma)
+```
+
+## Hour
+
+```{r, plot-hour}
+tbl(cn, "posts") %>%  
+  count(hour) %>% 
+  collect() %>% 
+  mutate(hour = lubridate::make_datetime(hour = hour)) %>% 
+  ggplot(aes(x = hour, y = n)) +
+  geom_col() +
+  hrbrthemes::theme_ipsum() +
+  scale_x_datetime(date_labels = "%H:%M") +
+  scale_y_continuous(label = comma)
+```
+
+# Interactions
+
+## Total interactions per post (overall)
+
+```{r, total-interactions-per-post}
+tbl(cn, "posts") %>% 
+  select(likes:care) %>% 
+  summarize_all(funs(mean, sd)) %>% 
+  collect() %>% 
+  gather(key, val) %>% 
+  summarize(mean_total_interactions_per_post = sum(val),
+            sd_total_interactions_per_post = sd(val))
+```
+
+## Mean total interactions per post (overall)
+
+```{r, mean-total-interactions}
+tbl(cn, "posts") %>% 
+  select(likes:care, year) %>% 
+  summarize_all(funs(mean, sd)) %>% 
+  collect() %>% 
+  select(-year_mean, -year_sd) %>% 
+  gather(key, val) %>% 
+  filter(!str_detect(key, "sd")) %>%
+  summarize(mean_total_interactions_per_post = sum(val),
+            sd_total_interactions_per_post = sd(val))
+```
+
+## Another way of presenting interactions
+
+probably preferable to and redundant with the others for the purposes of exploring the data, at least the others that are not by time
+
+```{r, descriptives-of-interactions-prep}
+descriptives_of_interactions <- tbl(cn, "posts") %>% 
+  select(likes:care) %>% 
+  summarize_all(funs(sum, mean, sd)) %>% 
+  collect()
+```
+
+```{r, descriptives-of-interactions-plot}
+table_of_descriptives <- descriptives_of_interactions %>% 
+  gather(key, val) %>% 
+  separate(key, into = c("var", "stat")) %>% 
+  spread(stat, val) %>% 
+  arrange(desc(sum))
+
+table_of_descriptives %>% 
+  knitr::kable()
+```
+
+```{r, descriptives-sum}
+table_of_descriptives %>% 
+  summarize_if(is.numeric, sum)
+```
+
+## Mean interactions by type per post (overall)
+
+```{r, mean-interactions-by-type-of-post-plot}
+interactions <- tbl(cn, "posts") %>% 
+  select(likes:care) %>% 
+  summarize_all(funs(mean, sd)) %>% 
+  collect()
+
+interactions %>% 
+  select(contains("mean")) %>% 
+  gather(key, val) %>% 
+  ggplot(aes(x = reorder(key,val), y = val)) + 
+  geom_col() + 
+  coord_flip() +
+  geom_smooth(se = FALSE) + 
+  hrbrthemes::theme_ipsum()
+```
+
+## Mean interactions by type per post by Month (2010-September, 2020)
+
+```{r, mean-interactions-by-type-by-month}
+interactions_by_month <- tbl(cn, "posts") %>% 
+  group_by(year, month) %>% 
+  select(likes:care) %>% 
+  summarize_all(funs(mean, sd)) %>% 
+  collect()
+
+interactions_by_month %>% 
+  select(contains("mean"), year, month) %>%
+  mutate(date = lubridate::make_date(year = year, month = month)) %>% 
+  ungroup() %>% 
+  select(-year, -month) %>% 
+  gather(key, val, -date) %>% 
+  filter(date >= lubridate::ymd("2010-01-01")) %>% 
+  filter(key != "care_mean", key != "angry_mean", key != "wow_mean") %>% 
+  ggplot(aes(x = date, y= val, group = key, color = key)) +
+  geom_point(alpha = .2) +
+  geom_line() +
+  geom_smooth(se = FALSE) + 
+  hrbrthemes::theme_ipsum()
+```
+
+## Mean interactions by type by month (2018-September, 2020)
+
+```{r, mean-interactions-by-type-by-month-focused}
+interactions_by_month %>% 
+  select(contains("mean"), year, month) %>%
+  mutate(date = lubridate::make_date(year = year, month = month)) %>% 
+  ungroup() %>% 
+  select(-year, -month) %>% 
+  gather(key, val, -date) %>% 
+  filter(date >= lubridate::ymd("2018-01-01")) %>% 
+  filter(key != "care_mean", key != "angry_mean", key != "wow_mean") %>% 
+  ggplot(aes(x = date, y= val, group = key, color = key)) +
+  geom_point(alpha = .2) +
+  geom_line() +
+  geom_smooth(se = FALSE) + 
+  hrbrthemes::theme_ipsum()
+```

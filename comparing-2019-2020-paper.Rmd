@@ -73,11 +73,19 @@ Our purpose is to understand how U.S. schools and school districts used Facebook
 
 Our research questions are:
 
-1. How does the frequency of posts differ between 2019 and 2020?
-2. How do interactions with posts differ? (likes, shares, reactions)
-3. How does the content of posts differ? (LIWC constructs)
-4. How do the topics of posts differ? (topic modeling)
+1. How did the COVID-19 pandemic impact the public-facing communication strategies of schools and school districts? 
 
+This is important to answer because this can help us:
+- to understand what districts said to THE PUBLIC (who are the recipients of these?)
+- be able to speak to emergent best practices for districts’ social media use. 
+- this can tell us about how they're responding to COVID (so using this data as a proxy for their response)
+
+Specifically, we examine the topics of posts
+
+- Look at how these are interacted with differently
+- Look at frequency of the topics of posts
+
+*2. What variation do we see in their use?*
 
 # Methods
 We report how we determined our sample size, all data exclusions (if any), all manipulations, and all measures in the study. <!-- 21-word solution (Simmons, Nelson & Simonsohn, 2012; retrieved from http://ssrn.com/abstract=2160588) -->

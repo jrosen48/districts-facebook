@@ -90,6 +90,8 @@ Specifically, we examine the topics of posts
 # Methods
 We report how we determined our sample size, all data exclusions (if any), all manipulations, and all measures in the study. <!-- 21-word solution (Simmons, Nelson & Simonsohn, 2012; retrieved from http://ssrn.com/abstract=2160588) -->
 
+The number of topics (k = X) was determined based on several model fit diagnostics, including held-out likelihood, residual check, exclusivity, and semantic coherence. Higher held-out likelihood suggests higher predictive power. For a document subset, the algorithm removes half of the set, and calculates the probability of detecting the held out words. We selected topic numbers with lower residual checks, which suggest that fewer topics would be necessary to explain data variance (Roberts et al., 2014). Finally, the choice of topic number achieved a balance between high semantic coherence and high exclusivity. Semantic coherence indicates the consistency of the predicted topics, such that words that appear frequently in a topic are more likely to co-occur within documents. Exclusivity describes the uniqueness of a topic's high-frequency words, such that these words do not overlap with the most frequent words of other topics.
+
 ## Participants
 
 ## Material

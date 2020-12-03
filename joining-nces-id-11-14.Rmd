@@ -1,0 +1,244 @@
+---
+title: "Joining NCES IDs"
+date: 2020-11-12
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, dpi = 250, warning = FALSE)
+knitr::clean_cache()
+```
+
+# Loading, setting up
+
+```{r, load-packages-and-connect-to-db}
+library(tidyverse) # analysis and processing
+library(DBI) # database interface
+library(scales) # plots
+library(quanteda) # text analysis
+
+cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-fb-posts.sqlite"))
+```
+
+## Total number of posts
+
+```{r}
+total_unique_posts <- tbl(cn, "posts") %>%
+  tally()
+```
+
+URL is a unique identifier
+
+```{r, inspect-table}
+tbl(cn, "posts") %>% 
+  count(url) %>%
+  tally()
+```
+
+## What we'll need to merge on
+
+Join un `url` from the db
+
+```{r, list-keys-to-possibly-merge-on}
+tbl(cn, "posts") %>% 
+  select(page_name, url) %>% 
+  head(10) %>% 
+  knitr::kable()
+```
+
+Join on `url` from `all-institutional-facebook-urls.csv`:
+
+```{r, orig-data-to-match}
+all_institutional_facebook_urls <- read_csv("data-raw/all-institutional-facebook-urls.csv",
+                                            col_types = cols(nces_id = col_character()))
+
+all_institutional_facebook_urls <- all_institutional_facebook_urls %>% 
+  mutate(parsed_path = ifelse(str_sub(parsed_path, start = -1) == "/",
+                              str_sub(parsed_path, end = -2),
+                              parsed_path)) %>% 
+  mutate(url = str_c("https://www.facebook.com/", parsed_path)) %>% 
+  select(-parsed_path)
+
+all_institutional_facebook_urls %>% 
+  head(10) %>% 
+  knitr::kable()
+```
+
+Let's try it! For 100,000 posts
+
+```{r}
+posts_100k <- tbl(cn, "posts") %>% 
+  select(page_name, likes, url) %>% 
+  mutate(url = tolower(url)) %>% 
+  head(100000) %>% 
+  collect()
+
+posts_100k <- posts_100k %>% 
+  separate(url, into = c("url", "post"), sep = "/posts")
+
+data_with_nces_id_joined <- left_join(posts_100k, all_institutional_facebook_urls, by = "url")
+
+all_institutional_facebook_urls
+
+```
+
+```{r}
+data_with_nces_id_joined_not_matched <- data_with_nces_id_joined %>% 
+  filter(is.na(nces_id)) 
+
+data_with_nces_id_joined_not_matched # around 16% without a match
+
+data_with_nces_id_joined_match <- data_with_nces_id_joined %>% 
+  filter(!is.na(nces_id))
+```
+
+
+```{r}
+# 4th
+fourth_spot <- all_institutional_facebook_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[4]], NA))
+
+all_institutional_facebook_urls_fourth <- all_institutional_facebook_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(fourth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_fourth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  semi_join(all_institutional_facebook_urls_fourth)
+
+# 5th
+fifth_spot <- all_institutional_facebook_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[5]], NA))
+
+all_institutional_facebook_urls_fifth <- all_institutional_facebook_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(fifth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_fifth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  semi_join(all_institutional_facebook_urls_fifth)
+
+# 6th
+sixth_spot <- all_institutional_facebook_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[6]], NA))
+
+all_institutional_facebook_urls_sixth <- all_institutional_facebook_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(sixth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_sixth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  semi_join(all_institutional_facebook_urls_sixth)
+
+# 7th
+seventh_spot <- all_institutional_facebook_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[7]], NA))
+
+all_institutional_facebook_urls_seventh <- all_institutional_facebook_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(seventh_spot))) %>% 
+  filter(!is.na(url))
+
+joined_seventh <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  semi_join(all_institutional_facebook_urls_seventh)
+
+# 8th
+eighth_spot <- all_institutional_facebook_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[8]], NA))
+
+all_institutional_facebook_urls_eighth <- all_institutional_facebook_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(eighth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_eighth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  semi_join(all_institutional_facebook_urls_eighth)
+
+# 9th
+ninth_spot <- all_institutional_facebook_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[9]], NA))
+
+all_institutional_facebook_urls_ninth <- all_institutional_facebook_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(ninth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_ninth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  semi_join(all_institutional_facebook_urls_ninth)
+
+new_joined_data <- bind_rows(joined_fourth) %>% 
+  bind_rows(joined_fifth) %>% 
+  bind_rows(joined_sixth) %>% 
+  bind_rows(joined_seventh) %>% 
+  bind_rows(joined_eighth) %>%
+  bind_rows(joined_ninth)
+
+new_joined_data
+```
+joining all back up
+
+```{r}
+data_with_nces_id_joined_not_matched
+data_with
+```
+
+# Joining data based on NCES ID
+
+This data is from the ELSI Table Generator: https://nces.ed.gov/ccd/elsi/tableGenerator.aspx
+
+Title
+
+```{r}
+nces_info_for_districts <- read_csv(here::here("data", "nces-info-for-districts.csv")) %>% 
+  select(nces_id, free_and_reduced_lunch_students_public_school_2017_18, state)
+
+nces_info_for_schools <- read_csv("data/ELSI_csv_export_6374077161361122015895.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(nces_id = str_extract(school_id_nces_assigned_public_school_latest_available_year, '\\(?[0-9,.]+')) %>% 
+  select(nces_id, free_and_reduced_lunch_students_public_school_2018_19, state = state_name_public_school_latest_available_year)
+
+nces_info <- nces_info_for_districts %>% 
+  bind_rows(nces_info_for_schools)
+
+nces_info$nces_id %>% nchar() %>% table() # this looks right
+
+data_with_nces_id_joined_match$nces_id %>% nchar() %>% table() # so does this
+
+data_with_nces_id_joined_match %>% 
+  left_join(nces_info, by = "nces_id") %>% 
+  mutate(state = tolower(state)) %>% 
+  count(state) %>% 
+  knitr::kable() # success!
+
+13873/nrow(data_with_nces_id_joined_match) # not able to be matched
+
+16417/100000
+```
+
+0.01632404 of those with NCES IDs not able to be matched; why? 
+0.16417 posts not able to be matched to NCES ID; why? slightly different URLs? explore
+
+`r 0.01632404 + 0.16417` posts not able to be matched; matching post URLs to URLs for FB from district pages seems high value
+
+# Big questions/next steps
+
+- How to join the ~16% that are loosely matching? Is there any kind of rule we can apply? Fuzzy join? https://cran.r-project.org/web/packages/fuzzyjoin/fuzzyjoin.pdf
+- At what level to analyze the data; many (many!) schools link to district pages; should we analyze just at district level?
+- Or, should we keep all of the school data, seeing how many link to any page?
+- Validating the data - coding roughly 100 districts/schools to see how many are pages for the district/school
+- Working on database

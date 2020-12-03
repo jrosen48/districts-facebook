@@ -1,0 +1,471 @@
+---
+title: "Joining NCES IDs"
+date: 2020-11-12
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, dpi = 250, warning = FALSE)
+knitr::clean_cache()
+```
+
+# Loading, setting up
+
+```{r, load-packages-and-connect-to-db}
+library(tidyverse) # analysis and processing
+library(DBI) # database interface
+library(scales) # plots
+library(quanteda) # text analysis
+library(skimr) # for descriptive stats
+
+cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-fb-posts.sqlite"))
+```
+
+# Let's join!
+
+## getting data
+
+```{r}
+posts_100k <- tbl(cn, "posts") %>% 
+  select(page_name, url, year, message) %>% 
+  mutate(url = tolower(url)) %>% 
+  filter(year == 2020) %>% 
+  collect()
+
+posts_100k <- posts_100k %>% 
+  separate(url, into = c("url", "post"), sep = "/posts")
+
+posts_100k <- posts_100k %>% 
+  distinct(url, post, .keep_all = TRUE)
+```
+
+```{r}
+all_institutional_facebook_urls <- read_csv("data-raw/all-institutional-facebook-urls.csv",
+                                            col_types = cols(nces_id = col_character()))
+
+all_institutional_facebook_urls <- all_institutional_facebook_urls %>% 
+  mutate(parsed_path = ifelse(str_sub(parsed_path, start = -1) == "/",
+                              str_sub(parsed_path, end = -2),
+                              parsed_path)) %>% 
+  mutate(url = str_c("https://www.facebook.com/", parsed_path)) %>% 
+  select(-parsed_path)
+```
+
+```{r}
+all_distinct_urls <- all_institutional_facebook_urls %>% 
+  distinct(url, .keep_all = T)
+
+data_with_nces_id_joined <- left_join(posts_100k, all_distinct_urls, by = "url")
+```
+
+## initial join
+
+```{r}
+data_with_nces_id_joined_not_matched <- data_with_nces_id_joined %>% 
+  filter(is.na(nces_id))
+
+data_with_nces_id_joined_match <- data_with_nces_id_joined %>% 
+  filter(!is.na(nces_id))
+
+str_c(round(nrow(data_with_nces_id_joined_match) / nrow(posts_100k) * 100, 2), "% joined")
+```
+
+## joining on other parts of the URL
+
+```{r}
+# 4th
+fourth_spot <- all_distinct_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[4]], NA))
+
+all_institutional_facebook_urls_fourth <- all_distinct_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(fourth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_fourth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_fourth)  %>% 
+  filter(!is.na(nces_id))
+
+# 5th
+fifth_spot <- all_distinct_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[5]], NA))
+
+all_institutional_facebook_urls_fifth <- all_distinct_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(fifth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_fifth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_fifth)  %>% 
+  filter(!is.na(nces_id))
+
+# 6th
+sixth_spot <- all_distinct_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[6]], NA))
+
+all_institutional_facebook_urls_sixth <- all_distinct_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(sixth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_sixth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_sixth) %>% 
+  filter(!is.na(nces_id))
+
+# 7th
+seventh_spot <- all_distinct_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[7]], NA))
+
+all_institutional_facebook_urls_seventh <- all_distinct_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(seventh_spot))) %>% 
+  filter(!is.na(url))
+
+joined_seventh <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_seventh) %>% 
+  filter(!is.na(nces_id))
+
+# 8th
+eighth_spot <- all_distinct_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[8]], NA))
+
+all_institutional_facebook_urls_eighth <- all_distinct_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(eighth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_eighth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_eighth)  %>% 
+  filter(!is.na(nces_id))
+
+# 9th
+ninth_spot <- all_distinct_urls %>% 
+  mutate(split_url = str_split(url, "/")) %>% 
+  pull(split_url) %>% 
+  map(possibly(~.[[9]], NA))
+
+all_institutional_facebook_urls_ninth <- all_distinct_urls %>% 
+  mutate(url = str_c("https://www.facebook.com/", unlist(ninth_spot))) %>% 
+  filter(!is.na(url))
+
+joined_ninth <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_ninth) %>% 
+  filter(!is.na(nces_id))
+
+new_joined_data <- bind_rows(joined_fourth) %>% 
+  bind_rows(joined_fifth) %>% 
+  bind_rows(joined_sixth) %>% 
+  bind_rows(joined_seventh) %>% 
+  bind_rows(joined_eighth) %>%
+  bind_rows(joined_ninth) %>% 
+  distinct(page_name, post, .keep_all = TRUE)
+```
+
+## removing spaces
+
+```{r}
+# fourth
+all_institutional_facebook_urls_fourth_no_dash <- all_institutional_facebook_urls_fourth %>% 
+  mutate(url = str_remove_all(url, "-"))
+
+joined_fourth_no_dash <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_fourth_no_dash) %>% 
+  filter(!is.na(nces_id))
+
+# fifth
+all_institutional_facebook_urls_fifth_no_dash <- all_institutional_facebook_urls_fifth %>% 
+  mutate(url = str_remove_all(url, "-"))
+
+joined_fifth_no_dash <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_fifth_no_dash) %>% 
+  filter(!is.na(nces_id))
+
+# sixth
+all_institutional_facebook_urls_sixth_no_dash <- all_institutional_facebook_urls_sixth %>% 
+  mutate(url = str_remove_all(url, "-"))
+
+joined_sixth_no_dash <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_sixth_no_dash) %>% 
+  filter(!is.na(nces_id))
+
+# seventh
+all_institutional_facebook_urls_seventh_no_dash <- all_institutional_facebook_urls_seventh %>% 
+  mutate(url = str_remove_all(url, "-"))
+
+joined_seventh_no_dash <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_seventh_no_dash) %>% 
+  filter(!is.na(nces_id))
+
+# eighth
+all_institutional_facebook_urls_eighth_no_dash <- all_institutional_facebook_urls_eighth %>% 
+  mutate(url = str_remove_all(url, "-"))
+
+joined_eighth_no_dash <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(all_institutional_facebook_urls_eighth_no_dash) %>% 
+  filter(!is.na(nces_id))
+
+new_data_without_dashes <- bind_rows(joined_fourth_no_dash) %>% 
+  bind_rows(joined_fifth_no_dash) %>% 
+  bind_rows(joined_sixth_no_dash) %>% 
+  bind_rows(joined_seventh_no_dash) %>% 
+  bind_rows(joined_eighth_no_dash) %>% 
+  distinct(page_name, post, .keep_all = TRUE)
+```
+
+## joining based only on integers
+
+```{r}
+all_institutional_facebook_urls_b <- all_distinct_urls
+
+all_of_the_numbers <- all_institutional_facebook_urls_b %>% 
+  mutate(id = stringr::str_extract_all(url, '\\(?[0-9,.]+')) %>% 
+  pull(id)
+
+find_15_digits <- function(x) {
+  x[nchar(x) == 15]
+}
+
+length_f <- function(x) {
+  length(x) > 0  
+}
+
+all_of_the_numbers <- all_of_the_numbers %>% 
+  map(possibly(find_15_digits, NA))
+
+all_institutional_facebook_urls_b$id <- map(all_of_the_numbers, function(x) if(identical(x, character(0))) NA_character_ else x)
+
+all_institutional_facebook_urls_b <- all_institutional_facebook_urls_b %>% 
+  unnest(id)
+
+x <- all_institutional_facebook_urls_b %>% 
+  mutate(url = str_c("https://www.facebook.com/", id)) %>% 
+  filter(!is.na(url)) %>% 
+  select(-id)
+
+from_15_char_id <- data_with_nces_id_joined_not_matched %>% 
+  select(-nces_id) %>% 
+  left_join(x) %>% 
+  filter(!is.na(nces_id))
+```
+
+## joining all back up - all done!
+
+```{r}
+all_to_join <- bind_rows(new_joined_data) %>% 
+  bind_rows(new_data_without_dashes) %>% 
+  bind_rows(from_15_char_id)
+
+all_to_join <- all_to_join %>% 
+  distinct(url, post, nces_id, page_name, year)
+
+data_with_nces_id_joined_match_all <- data_with_nces_id_joined_match %>% 
+  bind_rows(all_to_join)
+
+str_c("added ", nrow(data_with_nces_id_joined_match_all) - nrow(data_with_nces_id_joined_match), " rows; ",
+      (nrow(data_with_nces_id_joined_match_all) - nrow(data_with_nces_id_joined_match)) * 100 / nrow(posts_100k), "% change")
+```
+
+# Joining additional NCES data
+
+This data is from the ELSI Table Generator: https://nces.ed.gov/ccd/elsi/tableGenerator.aspx
+
+May want to update to 18-19 data for districts; this came out after I scraped data
+
+```{r}
+nces_info_for_districts <- read_csv(here::here("data", "nces-info-for-districts.csv")) %>% 
+  select(nces_id, free_and_reduced_lunch_students_public_school_2017_18, state)
+
+nces_info_for_schools <- read_csv("data/ELSI_csv_export_6374077161361122015895.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(nces_id = str_extract(school_id_nces_assigned_public_school_latest_available_year, '\\(?[0-9,.]+')) %>% 
+  select(nces_id, free_and_reduced_lunch_students_public_school_2018_19, state = state_name_public_school_latest_available_year)
+
+nces_info <- nces_info_for_districts %>% 
+  bind_rows(nces_info_for_schools)
+
+nces_info$nces_id %>% 
+  nchar() %>% 
+  table() # this looks right
+
+data_with_nces_id_joined_match_all$nces_id %>% 
+  nchar() %>% 
+  table() # so does this
+
+data_with_nces_id_joined_match_all %>% 
+  left_join(nces_info, by = "nces_id") %>% 
+  filter(is.na(state)) # almost all joined
+
+data_with_nces_id_joined_match_all %>% 
+  left_join(nces_info, by = "nces_id") %>% 
+  mutate(state = tolower(state)) %>% 
+  count(state) %>% 
+  knitr::kable() # success!
+
+str_c("Matched ", nrow(data_with_nces_id_joined_match_all)/nrow(posts_100k) * 100, "% of rows with NCES data")
+```
+
+# Exploring NCES data
+
+## n accounts
+
+```{r}
+nces_dist <- read_csv(here::here("data", "nces-info-for-districts.csv"))
+
+nces_scho <- read_csv("data/ELSI_csv_export_6374077161361122015895.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(nces_id = str_extract(school_id_nces_assigned_public_school_latest_available_year, '\\(?[0-9,.]+'))
+
+all_nces_ids <- data_with_nces_id_joined_match_all %>% 
+  distinct(nces_id)
+
+n_districts <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  semi_join(all_nces_ids) %>% 
+  nrow() 
+
+n_districts/8193
+```
+
+## checking sample
+
+```{r}
+nces_dist$frpl <- as.integer(nces_dist$free_and_reduced_lunch_students_public_school_2017_18) /
+  as.integer(nces_dist$total_students_all_grades_excludes_ae_district_2017_18)
+
+mean_fb_frpl <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  semi_join(all_nces_ids) %>% 
+  summarize(mean_frpl = mean(frpl, na.rm = TRUE))
+
+mean_frpl <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  summarize(mean_frpl = mean(frpl, na.rm = TRUE))
+
+mean_fb_frpl
+mean_frpl
+
+fb_ss <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  semi_join(all_nces_ids) %>% 
+  summarize(mean_ss = mean(as.integer(total_students_all_grades_excludes_ae_district_2017_18), na.rm = TRUE))
+
+mean_ss <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  summarize(mean_ss = mean(as.integer(total_students_all_grades_excludes_ae_district_2017_18), na.rm = TRUE))
+
+fb_ss
+mean_ss
+```
+
+## writing data
+
+```{r}
+d1 <- data_with_nces_id_joined_match_all %>% 
+  left_join(select(nces_dist, -url)) %>% 
+  select(url, nces_id, message, state, frpl, n_students = total_students_all_grades_excludes_ae_district_2017_18)
+
+write_csv(d1, "2020-district-data.csv")
+
+d1 <- read_csv("2019-district-data.csv")
+d2 <- read_csv("2020-district-data.csv")
+
+bind_rows(d1, d2) %>% write_rds("data/2019-2020-districts.rds")
+```
+
+## activity
+
+```{r}
+to_join_for_activity <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union")
+
+activity_d <- data_with_nces_id_joined_match_all %>% 
+  count(nces_id) %>% 
+  left_join(to_join_for_activity)
+
+activity_d %>% 
+  select(n, frpl, total_ss = total_students_all_grades_excludes_ae_district_2017_18) %>% 
+  corrr::correlate() %>% 
+  knitr::kable()
+
+```
+
+## Posts per account
+
+```{r}
+activity_d %>% 
+  select(n) %>% 
+  skimr::skim()
+```
+
+```{r}
+activity_d %>% 
+  ggplot(aes(x = n)) +
+  geom_histogram(bins = 100) +
+  ggtitle("posts per account") +
+  theme_bw()
+
+activity_d %>% 
+  filter(n < 50) %>% 
+  ggplot(aes(x = n)) +
+  geom_histogram(bins = 100) +
+  ggtitle("posts per account for accounts with less than 50 posts") +
+  theme_bw() +
+  scale_x_continuous(breaks = seq(from = 0, to = 49, by = 2), seq(from = 0, to = 49, by = 2)) +
+  xlab(NULL)
+```
+
+## by state 
+
+```{r}
+fb_state <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  semi_join(all_nces_ids) %>% 
+  count(state)
+
+all_state <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  count(state) %>% 
+  rename(total_n = n)
+
+left_join(fb_state, all_state) %>% 
+  mutate(prop = n / total_n) %>% 
+  rename(fb_n = n) %>% 
+  arrange(desc(prop)) %>% 
+  knitr::kable()
+```
+
+## using all possible NCES IDs (either not available or not joined)
+
+```{r}
+all_possible_nces_ids <- all_institutional_facebook_urls %>% 
+  distinct(nces_id)
+
+fb_pos_n <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  semi_join(all_possible_nces_ids) %>% 
+  nrow()
+
+fb_pos_n
+fb_pos_n/8193
+
+data_with_nces_id_joined_match_all 
+```

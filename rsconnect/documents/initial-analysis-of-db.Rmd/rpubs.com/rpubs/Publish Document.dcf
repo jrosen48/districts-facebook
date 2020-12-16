@@ -1,0 +1,10 @@
+name: Publish Document
+title:
+username:
+account: rpubs
+server: rpubs.com
+hostUrl: rpubs.com
+appId: https://api.rpubs.com/api/v1/document/703432/d8a4e6b0f92e419f90f3b1171e835c02
+bundleId: https://api.rpubs.com/api/v1/document/703432/d8a4e6b0f92e419f90f3b1171e835c02
+url: http://rpubs.com/jmichaelrosenberg/703432
+when: 1607781463.37991

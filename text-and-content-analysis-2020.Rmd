@@ -24,8 +24,61 @@ cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-f
 
 ```{r}
 ss_collected <- tbl(cn, "posts") %>% 
-  filter(year == 2020) %>% 
+  filter(year == 2019) %>% 
   collect()
+```
+
+```{r, eval = FALSE}
+posts_2020 <- readRDS("~/districts-facebook/data/rds/posts-2020.rds")
+```
+
+```{r, eval = FALSE}
+d1 <- read_csv("data/all-k12-institutions/2020/2020-11-09-13-35-27-EST-Historical-Report-all-k12-institutions-2020-10-01--2020-10-16.csv", col_types = cols(
+  .default = col_character(),
+  `Likes at Posting` = col_double(),
+  Message = col_character(),
+  Created = col_character(),
+  `Facebook Id` = col_double(),
+  Likes = col_double(),
+  Comments = col_double(),
+  Shares = col_double(),
+  Love = col_double(),
+  Wow = col_double(),
+  Haha = col_double(),
+  Sad = col_double(),
+  Angry = col_double(),
+  Care = col_double(),
+  `Post Views` = col_double(),
+  `Total Views` = col_double(),
+  `Total Views For All Crossposts` = col_double(),
+  `Overperforming Score` = col_double())) %>% 
+  prep_data()
+
+d2 <- read_csv("data/all-k12-institutions/2020/2020-11-09-13-35-20-EST-Historical-Report-all-k12-institutions-2020-10-16--2020-11-01.csv", col_types = cols(
+  .default = col_character(),
+  Message = col_character(),
+  Created = col_character(),
+  `Likes at Posting` = col_double(),
+  `Facebook Id` = col_double(),
+  Likes = col_double(),
+  Comments = col_double(),
+  Shares = col_double(),
+  Love = col_double(),
+  Wow = col_double(),
+  Haha = col_double(),
+  Sad = col_double(),
+  Angry = col_double(),
+  Care = col_double(),
+  `Post Views` = col_double(),
+  `Total Views` = col_double(),
+  `Total Views For All Crossposts` = col_double(),
+  `Overperforming Score` = col_double())) %>% 
+  prep_data()
+
+posts_2020 %>% 
+  bind_rows(d1) %>% 
+  bind_rows(d2) %>% 
+  write_rds("~/districts-facebook/data/rds/posts-2020.rds")
 ```
 
 ```{r}
@@ -39,7 +92,7 @@ ss_collected
 ```{r}
 ss <- ss_collected %>% 
   mutate(links_list = stringr::str_extract_all(message,
-                                        "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"))
+                                               "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"))
 
 unnested_urls <- ss %>% 
   unnest(links_list) %>% 
@@ -241,13 +294,12 @@ Not run just yet, working on API
 ```{r, eval = FALSE}
 ss_1000 <- tbl(cn, "posts") %>% 
   filter(year == 2020) %>% 
-  select(facebook_id) %>% 
-  collect() %>% 
-  sample_n(1000)
+    sample_n(100) %>% 
+  collect()
 
 files_to_download <- ss_collected %>% filter(type == "Photo") %>% pull(link) %>% head(5)
 
 map2(files_to_download,
      str_c("downloaded-photos/", 1:5, ".jpeg"),
-           download.file)
+     download.file)
 ```

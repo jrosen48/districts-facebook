@@ -1,0 +1,253 @@
+---
+title: "Comparing FB Links 2019-2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+
+clean_url <- function(strings) {
+  return(
+    strings %>%
+      sapply(., utils::URLdecode) %>%  
+      tolower() %>%
+      str_remove_all("^http[s]?://") %>%   # optional transfer protocol specification at beginning
+      str_remove_all("^w{3,}.") %>%  # optional www. or wwww{...}. at beginning
+      str_replace_all("/{1,}","/") %>%   # redundant forward slashes
+      str_remove_all("facebook.[a-z]{2,3}/") %>%  # international endings, .de, .fr, .it, ...
+      str_remove_all("posts/.*|videos/.*|timeline.*|events/.*") %>% # content chunks
+      str_remove_all("/$") %>%    # forward slashes at the end of URLs
+      str_remove_all("pages/|pg/|hashtag/|people/") %>%  # old page identifyers
+      str_remove_all("category/(?=\\S*['-])([a-zA-Z'-]+)/")  # category names with dashes
+  )
+}
+```
+
+```{r}
+library(DBI)
+cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-fb-posts.sqlite"))
+
+ss_collected <- tbl(cn, "posts") %>% 
+  select(user_name, facebook_id, page_name, year)
+collect()
+
+d_ct_a <- read_rds("2019-2020-posts.rds") %>%
+  mutate(user_name = tolower(user_name))
+# 
+# d_ct <- distinct(d, facebook_id, page_name, .keep_all = TRUE)
+# 
+# d_ct %>% 
+#   write_rds("unique-fb-accounts.rds")
+
+d_ct <- read_rds("unique-fb-accounts.rds") %>% 
+  select(-nces_id)
+
+d_wp <- read_csv("data-raw/all-institutional-facebook-urls.csv", col_types = cols(nces_id = col_character()))
+```
+
+```{r}
+d_wp$url_clean <- d_wp$url %>% 
+  clean_url()
+
+d_wp$facebook_id <- d_wp$url_clean %>% 
+  sapply(., function(x) { if (str_detect(x, "[[:digit:]]{9,1000}")) 
+  { return( str_extract(x, "[[:digit:]]{9,1000}") ) } else {return(NA)} }) %>%  # extract fb ids if possible
+  str_replace_all("([.])|[[:punct:]]", "\\1")   # finally, punctuation (except dots) for final matching, result is either fb id or user_name
+
+d_wp$user_name <- d_wp$url_clean %>% 
+  str_remove_all("[[:digit:]]{9,}") %>%
+  str_replace_all("([.])|[[:punct:]]", "\\1")    # the only punctation in facebook user names is a dot, all other punctation can be cleaned
+
+d_wp_1 <- d_wp %>% 
+  select(facebook_id, nces_id)
+
+d_wp_2 <- d_wp %>% 
+  select(user_name, nces_id)
+```
+
+```{r}
+d <- d_ct %>% 
+  left_join(d_wp_1, by = "facebook_id")
+
+d$nces_id %>% is.na %>% `!` %>% sum / nrow(d)   # almost 50%, not bad!
+
+d <- d %>% 
+  left_join(d_wp_2, by = "user_name")
+
+d$nces_id.x[which(is.na(d$nces_id.x))] <- d$nces_id.y[which(is.na(d$nces_id.x))]
+
+d <- d %>% 
+  rename(nces_id = nces_id.x) %>%
+  select(-nces_id.y)
+
+d <- d[!duplicated(d),]
+
+d$nces_id %>% is.na %>% `!` %>% sum / nrow(d)   # yay!
+```
+
+```{r}
+d %>% 
+  count(page_name)
+
+d %>% 
+  count(facebook_id)
+
+nrow(d_ct)
+
+nrow(d_wp)
+```
+
+# Key filtering line - why do multiple districts are an ID? 
+
+(9792-8236)/9792
+
+```{r}
+nces_d <- read_csv(here::here("data", "nces-info-for-districts.csv")) %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union" | agency_type_district_2017_18 == "7-Independent Charter District")
+
+all_unique_ids <- distinct(d, nces_id, .keep_all = T)
+
+district_ids <- d %>% 
+  count(nces_id) %>% 
+  filter(nchar(nces_id) == 7) %>% 
+  left_join(all_unique_ids) %>% 
+  mutate(has_district = 1) 
+
+nces_ds <- nces_d %>% 
+  left_join(district_ids, by = "nces_id") %>% 
+  distinct(nces_id, .keep_all = T) # this is the key line - why do multiple districts share an ID? (9792-8236)/9792
+
+nces_ds %>% filter(has_district == 1) %>% nrow()
+
+str_c(round(nces_ds %>% filter(has_district == 1) %>% nrow() / nrow(nces_ds), 3) * 100, "% of districts have a link to a FB account with a post in 2019-2020")
+```
+
+```{r}
+school_d <- read_csv(here::here("data", "nces-info-for-schools.csv")) %>%
+  janitor::clean_names() %>%
+  filter(school_type_public_school_2018_19 == "1-Regular school") %>%
+  rename(nces_id = school_nces_id)
+
+school_ids <- d %>%
+  count(nces_id) %>%
+  filter(nchar(nces_id) == 12) %>%
+  left_join(all_unique_ids) %>%
+  mutate(has_school = 1)
+
+# school_ds <- school_d %>% 
+#   left_join(school_ids, by = "nces_id")
+# 
+# str_c(round(school_ds %>% filter(has_school == 1) %>% nrow() / nrow(school_ds), 3) * 100, "% of school have a link to a FB account with a post in 2019-2020")
+# 
+# school_ds %>% 
+#   filter(!is.na(facebook_id))
+```
+
+```{r}
+district_ids_ss <- select(district_ids, facebook_id, nces_id) %>% mutate(has_id = 1)
+school_ids_ss <- select(school_ids, facebook_id, nces_id)
+
+d_ct_a <- d_ct_a %>% 
+  mutate(facebook_id = as.character(facebook_id))
+
+district_posts <- d_ct_a %>% 
+  left_join(district_ids_ss, by = "facebook_id") %>% 
+  filter(!is.na(nces_id))
+```
+
+Links 
+
+```{r}
+ss <- district_posts %>% 
+  mutate(links_list = stringr::str_extract_all(message,
+                                               "http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+"))
+
+unnested_urls <- ss %>% 
+  unnest(links_list) %>% 
+  filter(!is.na(links_list))
+```
+
+```{r}
+my_long_urls <- longurl::expand_urls(unnested_urls$links_list)
+```
+
+```{r}
+my_long_urls_processed <- unnested_urls %>% 
+  mutate(orig_url= str_split(links_list, ":=:")) %>% 
+  mutate(orig_url_second = map(orig_url, pluck, 2)) %>% 
+  rowwise() %>%  
+  mutate(url = ifelse(is.null(orig_url_second), orig_url, orig_url_second))
+
+short_doms <- c("bit.ly", "ow.ly", "tinyurl", "buff.ly", "goo.gl", "tinyurl.com")
+
+parsed_urls <- urltools::url_parse(my_long_urls_processed$url) %>% 
+  as_tibble()
+
+Sys.time()
+parsed_urls_ss <- parsed_urls[1:nrow(parsed_urls), ]
+my_long_urls_processed_ss <- my_long_urls_processed[1:nrow(parsed_urls), ]
+
+res <- longurl::expand_urls(my_long_urls_processed_ss$url[parsed_urls_ss$domain %in% short_doms])
+Sys.time()
+
+my_long_urls_processed_ss$url[parsed_urls_ss$domain %in% short_doms] <- res$expanded_url
+
+my_long_urls_processed_ss %>% 
+  select(page_name:links_list) %>% 
+  write_csv("processed-urls.csv")
+
+parsed_urls_2 <- urltools::url_parse(my_long_urls_processed_ss$url) %>% 
+  as_tibble()
+
+my_long_urls_processed_ss$domain <- parsed_urls_2$domain
+
+parsed_urls_2 %>% 
+  count(domain) %>% 
+  arrange(desc(n)) %>% 
+  filter(!is.na(domain)) %>%
+  mutate(prop = n/sum(n)) %>% 
+  slice(1:25)
+```
+
+```{r}
+dd <- my_long_urls_processed_ss %>% 
+  select(nces_id, year, domain)
+
+dd19 <- filter(dd, year == 2019)
+nrow(dd19)
+
+dd19 <- dd19 %>% semi_join(dd20, by = "nces_id") # so only districts also in 2020 are here
+nrow(dd19)
+
+dd19p <- dd19 %>% count(domain) %>% arrange(desc(n)) %>% ungroup() %>% mutate(prop = n/sum(n)) %>%
+  rename(n2019 = n,prop2019=prop)
+
+dd20 <- filter(dd, year == 2020)
+nrow(dd20)
+dd20 <- dd20 %>% semi_join(dd19, by = "nces_id") # so only districts also in 2019 are here
+nrow(dd20)
+
+dd20p <- dd20 %>% count(domain) %>% arrange(desc(n)) %>% ungroup() %>% mutate(prop = n/sum(n)) %>% rename(n2020 = n, prop2020 = prop)
+
+ddd <- full_join(dd19p, dd20p)
+
+ddd <- ddd %>% mutate_if(is.double, replace_na, 0) %>% mutate_if(is.integer, replace_na, 0)
+
+ddd <- ddd %>% 
+  mutate(prop_diff = prop2020-prop2019,
+         n_diff = n2020-n2019)
+
+ddd %>% 
+  arrange(desc(n_diff)) %>% 
+  filter(!is.na(domain)) %>% 
+  slice(1:20)
+
+ddd %>% 
+  arrange(n_diff) %>% 
+  filter(!is.na(domain)) %>% 
+  slice(1:20)
+```

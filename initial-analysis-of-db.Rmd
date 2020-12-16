@@ -26,96 +26,16 @@ cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-f
 ## Total number of posts
 
 ```{r}
-total_unique_posts <- tbl(cn, "posts") %>% 
-  distinct(url, .keep_all = TRUE) %>% 
+total_unique_posts <- tbl(cn, "posts") %>%
   tally()
-```
-
-```{r, total-n-posts}
-total_posts <- by_day %>% 
-  summarize(sum_n = sum(n))
-
-total_posts
-```
-
-Duplicated posts - have to find a way to remove these
-
-```{r, dup-posts}
-total_unique_posts - total_posts
 ```
 
 URL is a unique identifier
 
 ```{r, inspect-table}
 tbl(cn, "posts") %>% 
-  count(url) %>% 
+  count(url) %>%
   tally()
-```
-
-## What we'll need to merge on
-
-Join un `url` from the db
-
-```{r, list-keys-to-possibly-merge-on}
-tbl(cn, "posts") %>% 
-  select(page_name, url) %>% 
-  head(10) %>% 
-  knitr::kable()
-```
-
-Join on `url` from `all-institutional-facebook-urls.csv`:
-
-```{r, orig-data-to-match}
-all_institutional_facebook_urls <- read_csv("data-raw/all-institutional-facebook-urls.csv")
-
-all_institutional_facebook_urls <- all_institutional_facebook_urls %>% 
-  mutate(parsed_path = ifelse(str_sub(parsed_path, start = -1) == "/",
-                      str_sub(parsed_path, end = -2),
-                      parsed_path)) %>% 
-  mutate(url = str_c("https://www.facebook.com/", parsed_path)) %>% 
-  select(-parsed_path)
-
-all_institutional_facebook_urls %>% 
-  head(10) %>% 
-  knitr::kable()
-```
-
-Let's try it! For 100,000 posts
-
-```{r}
-posts_100k <- tbl(cn, "posts") %>% 
-  select(page_name, likes, url) %>% 
-  mutate(url = tolower(url)) %>% 
-  head(100000) %>% 
-  collect()
-
-posts_100k <- posts_100k %>% 
-  separate(url, into = c("url", "post"), sep = "/posts")
-
-data_with_nces_id_joined <- left_join(posts_100k, all_institutional_facebook_urls, by = "url")
-
-data_with_nces_id_joined %>% filter(is.na(nces_id)) # aruond 15% without a match; why?
-
-data_with_nces_id_joined_match <- data_with_nces_id_joined %>% 
-  filter(!is.na(nces_id))
-```
-
-# Joining data based on NCES ID
-
-This data is from the ELSI Table Generator: https://nces.ed.gov/ccd/elsi/tableGenerator.aspx
-
-```{r}
-nces_info_for_districts <- read_csv(here::here("data", "nces-info-for-districts.csv"))
-
-nces_info_for_districts$nces_id
-data_with_nces_id_joined_match$nces_id # what is the weird /" symbol in these?
-
-data_with_nces_id_joined_match %>% 
-  filter(str_detect(url, "roanokecitypublicschools")) # 5103300 is district ID
-
-data_with_nces_id_joined_match %>% 
-  left_join(nces_info_for_districts, by = "nces_id") %>% 
-  count(state) # very many missing; I think they may be school IDs? many questions
 ```
 
 # Types of post
@@ -145,15 +65,13 @@ tbl(cn, "posts") %>% count(facebook_id) %>%
   geom_histogram(bins = 1000)
 ```
 
-
 # Time series
 
 ```{r, plot-between-years}
 by_day <- tbl(cn, "posts") %>% 
   count(created_rounded_to_day) %>% 
   collect() %>% 
-  mutate(day = as.POSIXct(created_rounded_to_day, origin = "1970-01-01")) %>% 
-  filter(day >= lubridate::ymd("2005-01-01"))
+  mutate(day = as.POSIXct(created_rounded_to_day, origin = "1970-01-01"))
 ```
 
 ## Month of year - within the year
@@ -163,16 +81,21 @@ by_day %>%
   mutate(yday = lubridate::yday(day),
          month = lubridate::month(day),
          year = lubridate::year(day)) %>% 
-  filter(year >= 2010) %>% 
+  filter(year >= 2009) %>% 
   mutate(year = as.factor(year)) %>% 
   group_by(year, month) %>% 
   summarize(sum_n = sum(n)) %>% 
   ggplot(aes(x = month, y = sum_n, color = year, group = year)) +
   geom_point() +
   geom_line() +
-  hrbrthemes::theme_ipsum() +
-  scale_color_brewer(type = "div") +
-  scale_y_continuous(label = comma)
+  hrbrthemes::theme_ipsum(base_size = 13) +
+  scale_y_continuous(label = comma) +
+  scale_x_continuous(labels = 1:12, breaks = 1:12) +
+  scale_color_discrete("",guide = guide_legend(reverse = TRUE)) +
+  ylab("Posts") +
+  xlab("Month")
+
+ggsave('posts-per-month.png', width = 8, height = 6)
 ```
 
 ## Month of year - between years

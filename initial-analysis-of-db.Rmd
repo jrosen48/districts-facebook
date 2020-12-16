@@ -38,121 +38,6 @@ tbl(cn, "posts") %>%
   tally()
 ```
 
-## What we'll need to merge on
-
-Join un `url` from the db
-
-```{r, list-keys-to-possibly-merge-on}
-tbl(cn, "posts") %>% 
-  select(page_name, url) %>% 
-  head(10) %>% 
-  knitr::kable()
-```
-
-Join on `url` from `all-institutional-facebook-urls.csv`:
-
-```{r, orig-data-to-match}
-all_institutional_facebook_urls <- read_csv("data-raw/all-institutional-facebook-urls.csv",
-                                            col_types = cols(nces_id = col_character()))
-
-all_institutional_facebook_urls <- all_institutional_facebook_urls %>% 
-  mutate(parsed_path = ifelse(str_sub(parsed_path, start = -1) == "/",
-                              str_sub(parsed_path, end = -2),
-                              parsed_path)) %>% 
-  mutate(url = str_c("https://www.facebook.com/", parsed_path)) %>% 
-  select(-parsed_path)
-
-all_institutional_facebook_urls %>% 
-  head(10) %>% 
-  knitr::kable()
-```
-
-Let's try it! For 100,000 posts
-
-```{r}
-posts_100k <- tbl(cn, "posts") %>% 
-  select(page_name, likes, url) %>% 
-  mutate(url = tolower(url)) %>% 
-  head(100000) %>% 
-  collect()
-
-posts_100k <- posts_100k %>% 
-  separate(url, into = c("url", "post"), sep = "/posts")
-
-data_with_nces_id_joined <- left_join(posts_100k, all_institutional_facebook_urls, by = "url")
-
-data_with_nces_id_joined_not_matched <- data_with_nces_id_joined %>% 
-  filter(is.na(nces_id)) 
-
-data_with_nces_id_joined_not_matched # aroond 16% without a match; why?
-
-data_with_nces_id_joined_match <- data_with_nces_id_joined %>% 
-  filter(!is.na(nces_id))
-```
-
-let's look at a sample of those that didn't match
-
-```{r}
-data_with_nces_id_joined_not_matched %>% 
-  sample_n(10) %>% 
-  select(url, everything()) %>% 
-  knitr::kable()
-```
-
-Let's check a few
-
-```{r}
-all_institutional_facebook_urls %>% 
-  filter(str_detect(url, "yinghuaacademy"))
-
-all_institutional_facebook_urls %>% 
-  filter(str_detect(url, "yinghua")) # hmm, this is a clue; old URLs?
-
-all_institutional_facebook_urls %>% 
-  filter(str_detect(url, "zanesvillecityschools"))
-
-all_institutional_facebook_urls %>% 
-  filter(str_detect(url, "zanesville")) # not sure how to address
-```
-
-# Joining data based on NCES ID
-
-This data is from the ELSI Table Generator: https://nces.ed.gov/ccd/elsi/tableGenerator.aspx
-
-Title
-
-```{r}
-nces_info_for_districts <- read_csv(here::here("data", "nces-info-for-districts.csv")) %>% 
-  select(nces_id, free_and_reduced_lunch_students_public_school_2017_18, state)
-
-nces_info_for_schools <- read_csv("data/ELSI_csv_export_6374077161361122015895.csv") %>% 
-  janitor::clean_names() %>% 
-  mutate(nces_id = str_extract(school_id_nces_assigned_public_school_latest_available_year, '\\(?[0-9,.]+')) %>% 
-  select(nces_id, free_and_reduced_lunch_students_public_school_2018_19, state = state_name_public_school_latest_available_year)
-
-nces_info <- nces_info_for_districts %>% 
-  bind_rows(nces_info_for_schools)
-
-nces_info$nces_id %>% nchar() %>% table() # this looks right
-
-data_with_nces_id_joined_match$nces_id %>% nchar() %>% table() # so does this
-
-data_with_nces_id_joined_match %>% 
-  left_join(nces_info, by = "nces_id") %>% 
-  mutate(state = tolower(state)) %>% 
-  count(state) %>% 
-  knitr::kable() # success!
-
-13873/nrow(data_with_nces_id_joined_match) # not able to be matched
-
-16417/100000
-```
-
-0.01632404 of those with NCES IDs not able to be matched; why? 
-0.16417 posts not able to be matched to NCES ID; why? slightly different URLs? explore
-
-`r 0.01632404 + 0.16417` posts not able to be matched; matching post URLs to URLs for FB from district pages seems high value
-
 # Types of post
 
 ```{r}
@@ -180,15 +65,13 @@ tbl(cn, "posts") %>% count(facebook_id) %>%
   geom_histogram(bins = 1000)
 ```
 
-
 # Time series
 
 ```{r, plot-between-years}
 by_day <- tbl(cn, "posts") %>% 
   count(created_rounded_to_day) %>% 
   collect() %>% 
-  mutate(day = as.POSIXct(created_rounded_to_day, origin = "1970-01-01")) %>% 
-  filter(day >= lubridate::ymd("2005-01-01"))
+  mutate(day = as.POSIXct(created_rounded_to_day, origin = "1970-01-01"))
 ```
 
 ## Month of year - within the year
@@ -198,16 +81,21 @@ by_day %>%
   mutate(yday = lubridate::yday(day),
          month = lubridate::month(day),
          year = lubridate::year(day)) %>% 
-  filter(year >= 2010) %>% 
+  filter(year >= 2009) %>% 
   mutate(year = as.factor(year)) %>% 
   group_by(year, month) %>% 
   summarize(sum_n = sum(n)) %>% 
   ggplot(aes(x = month, y = sum_n, color = year, group = year)) +
   geom_point() +
   geom_line() +
-  hrbrthemes::theme_ipsum() +
-  scale_color_brewer(type = "div") +
-  scale_y_continuous(label = comma)
+  hrbrthemes::theme_ipsum(base_size = 13) +
+  scale_y_continuous(label = comma) +
+  scale_x_continuous(labels = 1:12, breaks = 1:12) +
+  scale_color_discrete("",guide = guide_legend(reverse = TRUE)) +
+  ylab("Posts") +
+  xlab("Month")
+
+ggsave('posts-per-month.png', width = 8, height = 6)
 ```
 
 ## Month of year - between years

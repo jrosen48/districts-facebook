@@ -21,6 +21,22 @@ library(scales) # plots
 library(quanteda) # text analysis
 library(skimr) # for descriptive stats
 
+clean_url <- function(strings) {
+  return(
+    strings %>%
+      sapply(., utils::URLdecode) %>%  
+      tolower() %>%
+      str_remove_all("^http[s]?://") %>%   # optional transfer protocol specification at beginning
+      str_remove_all("^w{3,}.") %>%  # optional www. or wwww{...}. at beginning
+      str_replace_all("/{1,}","/") %>%   # redundant forward slashes
+      str_remove_all("facebook.[a-z]{2,3}/") %>%  # international endings, .de, .fr, .it, ...
+      str_remove_all("posts/.*|videos/.*|timeline.*|events/.*") %>% # content chunks
+      str_remove_all("/$") %>%    # forward slashes at the end of URLs
+      str_remove_all("pages/|pg/|hashtag/|people/") %>%  # old page identifyers
+      str_remove_all("category/(?=\\S*['-])([a-zA-Z'-]+)/")  # category names with dashes
+  )
+}
+
 cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-fb-posts.sqlite"))
 ```
 
@@ -29,23 +45,80 @@ cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-f
 ## getting data
 
 ```{r}
-posts_100k <- tbl(cn, "posts") %>% 
-  select(page_name, url, year, message) %>% 
+posts <- tbl(cn, "posts") %>% 
+  select(page_name, facebook_id, user_name, url, year, message) %>% 
   mutate(url = tolower(url)) %>% 
-  filter(year == 2020) %>% 
+  filter(year >= 2019) %>% 
   collect()
 
-posts_100k <- posts_100k %>% 
+posts <- posts %>% 
   separate(url, into = c("url", "post"), sep = "/posts")
 
-posts_100k <- posts_100k %>% 
+posts <- posts %>% 
   distinct(url, post, .keep_all = TRUE)
+
+write_rds(posts, "2019-2020-posts.rds")
 ```
 
 ```{r}
 all_institutional_facebook_urls <- read_csv("data-raw/all-institutional-facebook-urls.csv",
                                             col_types = cols(nces_id = col_character()))
 
+all_institutional_facebook_urls$url <- all_institutional_facebook_urls$url %>% clean_url()
+
+all_institutional_facebook_urls$facebook_id <- all_institutional_facebook_urls$url %>% 
+  sapply(., function(x) { if (str_detect(x, "[[:digit:]]{9,1000}")) { return( str_extract(x, "[[:digit:]]{9,1000}") ) } else { return(NA) } } ) %>% 
+  as.vector()   # if possible, extract facebook ID
+
+all_institutional_facebook_urls$user_name <- all_institutional_facebook_urls$url %>% 
+  str_remove_all("[[:digit:]]{9,}") %>%
+  str_replace_all("([.])|[[:punct:]]", "\\1")    # only allow dots as punctuation
+```
+
+```{r}
+nces_info_for_districts <- read_csv(here::here("data", "nces-info-for-districts.csv")) %>% 
+      filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  select(nces_id, free_and_reduced_lunch_students_public_school_2017_18, state)
+
+
+d <- d_ct %>% left_join(d_wp_1, by="facebook_id")
+
+d$nces_id %>% is.na %>% `!` %>% sum / nrow(d)   # almost 50%, not bad!
+
+d <- d %>% left_join(d_wp_2, by="user_name")
+
+d$nces_id.x[which(is.na(d$nces_id.x))] <- d$nces_id.y[which(is.na(d$nces_id.x))]
+
+d <- d %>% 
+  rename(nces_id = nces_id.x) %>%
+  select(-nces_id.y)
+
+d <- d[!duplicated(d),]
+
+d$nces_id %>% is.na %>% `!` %>% sum / nrow(d)   # 100%, yay!
+
+
+
+
+
+data_with_nces_id_joined_match_all %>% 
+  left_join(nces_info, by = "nces_id") %>% 
+  filter(is.na(state)) # almost all joined
+
+data_with_nces_id_joined_match_all %>% 
+  left_join(nces_info, by = "nces_id") %>% 
+  mutate(state = tolower(state)) %>% 
+  count(state) %>% 
+  knitr::kable() # success!
+
+n_districts <- nces_dist %>% 
+  filter(agency_type_district_2017_18 == "1-Regular local school district that is NOT a component of a supervisory union") %>% 
+  semi_join(all_nces_ids) %>% 
+  nrow() 
+
+```
+
+```{r}
 all_institutional_facebook_urls <- all_institutional_facebook_urls %>% 
   mutate(parsed_path = ifelse(str_sub(parsed_path, start = -1) == "/",
                               str_sub(parsed_path, end = -2),
@@ -384,7 +457,9 @@ d1 <- data_with_nces_id_joined_match_all %>%
   select(url, nces_id, message, state, frpl, n_students = total_students_all_grades_excludes_ae_district_2017_18)
 
 write_csv(d1, "2020-district-data.csv")
+```
 
+```{r}
 d1 <- read_csv("2019-district-data.csv")
 d2 <- read_csv("2020-district-data.csv")
 

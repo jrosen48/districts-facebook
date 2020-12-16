@@ -3,26 +3,26 @@ library(DBI)
 # library(RMySQL)
 library(RSQLite)
 
-con <- DBI::dbConnect(odbc::odbc(),
-                      driver = "PostgreSQL Driver",
-                      UID = "joshuarosenberg",
-                      PWD = "Bdqx1KeeADYkMJ5Zhj38",
-                      host = "k12institutionsonfb.clpifghpngbx.us-east-2.rds.amazonaws.com",
-                      port = 5432)
-
-con <- DBI::dbConnect(odbc::odbc(),
-                      Driver   = "PostgreSQL Driver",
-                      Server   = "k12institutionsonfb.clpifghpngbx.us-east-2.rds.amazonaws.com",
-                      UID = "joshuarosenberg",
-                      PWD = "Bdqx1KeeADYkMJ5Zhj38",
-                      Port     = 5432)
-
-cn <- dbConnect(RPostgres::Postgres(), 
-                dbname = "postgres",
-                user = "joshuarosenberg",
-                password = "Bdqx1KeeADYkMJ5Zhj38",
-                host     = "k12institutionsonfb.clpifghpngbx.us-east-2.rds.amazonaws.com",
-                port     = 5432)
+# con <- DBI::dbConnect(odbc::odbc(),
+#                       driver = "PostgreSQL Driver",
+#                       UID = "joshuarosenberg",
+#                       PWD = "Bdqx1KeeADYkMJ5Zhj38",
+#                       host = "k12institutionsonfb.clpifghpngbx.us-east-2.rds.amazonaws.com",
+#                       port = 5432)
+# 
+# con <- DBI::dbConnect(odbc::odbc(),
+#                       Driver   = "PostgreSQL Driver",
+#                       Server   = "k12institutionsonfb.clpifghpngbx.us-east-2.rds.amazonaws.com",
+#                       UID = "joshuarosenberg",
+#                       PWD = "Bdqx1KeeADYkMJ5Zhj38",
+#                       Port     = 5432)
+# 
+# cn <- dbConnect(RPostgres::Postgres(), 
+#                 dbname = "postgres",
+#                 user = "joshuarosenberg",
+#                 password = "Bdqx1KeeADYkMJ5Zhj38",
+#                 host     = "k12institutionsonfb.clpifghpngbx.us-east-2.rds.amazonaws.com",
+#                 port     = 5432)
 
 dbCreateTable(cn, "posts")
 
@@ -40,7 +40,7 @@ dbListTables(cn)
 
 cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-fb-posts-19-20.sqlite"))
 dbListTables(cn)
-dbRemoveTable(cn, "posts")
+#dbRemoveTable(cn, "posts")
 
 sample_d <- read_csv("data/all-k12-institutions/2005-2012/2020-10-16-16-16-39-EDT-Historical-Report-all-k12-institutions-2012-01-01--2012-06-01.csv",
                      col_types = cols(
@@ -239,13 +239,14 @@ add_file_to_db <- function(f, cn) {
                   `Overperforming Score` = col_double())
   )
   
+  d <- select(d, -`Total Interactions`)
   prepped_data <- prep_data(d)
   
   dbWriteTable(cn, "posts", prepped_data, overwrite = FALSE, append = TRUE)
   
 }
 
-files <- list.files(here::here("data", "all-k12-institutions", "2020"), 
+files <- list.files(here::here("data", "all-k12-institutions", "2020", "new"), 
                     full.names = TRUE,
                     pattern = "\\.csv$", 
                     recursive = TRUE)

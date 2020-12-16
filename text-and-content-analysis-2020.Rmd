@@ -26,10 +26,6 @@ cn <- dbConnect(RSQLite::SQLite(), dbname = here::here("db", "k12-institutions-f
 ss_collected <- tbl(cn, "posts") %>% 
   filter(year == 2019) %>% 
   collect()
-
-ss_collected %>% 
-  distinct(url, .keep_all = T) %>% 
-  write_rds("data/rds/posts-2019.rds")
 ```
 
 ```{r, eval = FALSE}
@@ -298,9 +294,8 @@ Not run just yet, working on API
 ```{r, eval = FALSE}
 ss_1000 <- tbl(cn, "posts") %>% 
   filter(year == 2020) %>% 
-  select(facebook_id) %>% 
-  collect() %>% 
-  sample_n(1000)
+    sample_n(100) %>% 
+  collect()
 
 files_to_download <- ss_collected %>% filter(type == "Photo") %>% pull(link) %>% head(5)
 
